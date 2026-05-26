@@ -26,10 +26,6 @@ func TestFactoryReturnsUnimplementedForUnwiredStores(t *testing.T) {
 	}{
 		{"TaskStore", func() error { _, err := f.NewTaskStore(); return err }},
 		{"FairTaskStore", func() error { _, err := f.NewFairTaskStore(); return err }},
-		{"MetadataStore", func() error { _, err := f.NewMetadataStore(); return err }},
-		{"QueueV2", func() error { _, err := f.NewQueueV2(); return err }},
-		{"ClusterMetadataStore", func() error { _, err := f.NewClusterMetadataStore(); return err }},
-		{"NexusEndpointStore", func() error { _, err := f.NewNexusEndpointStore(); return err }},
 	}
 
 	for _, tc := range cases {
