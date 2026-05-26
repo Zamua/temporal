@@ -70,10 +70,11 @@ func (e *executionStore) GetName() string { return objstoreName }
 func (e *executionStore) Close()           {}
 
 // GetHistoryBranchUtil returns the helper Temporal uses to mint
-// branch tokens for history V2. We use the persistence package's
-// default implementation — branch IDs are opaque to objstore.
+// branch tokens for history V2. We rely on the standard implementation
+// which serializes branch tokens via the package serializer — that's
+// why ExecutionStore carries a serializer dependency.
 func (e *executionStore) GetHistoryBranchUtil() persistence.HistoryBranchUtil {
-	return &persistence.HistoryBranchUtilImpl{}
+	return persistence.NewHistoryBranchUtil(e.serializer)
 }
 
 // --- key layout helpers ---

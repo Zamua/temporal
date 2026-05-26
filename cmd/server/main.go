@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence/objstore"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"     // needed to load sqlite plugin
@@ -231,6 +232,11 @@ func buildCLI() *cli.App {
 					temporal.WithAudienceGetter(func(cfg *config.Config) authorization.JWTAudienceMapper {
 						return audienceMapper
 					}),
+					// Wire the objstore persistence backend. The factory is
+					// only consulted when a `customDatastore` block names
+					// it in the YAML, so registering it unconditionally is
+					// backward compatible with all existing configs.
+					temporal.WithCustomDataStoreFactory(objstore.NewAbstractFactory()),
 				)
 				if err != nil {
 					return cli.Exit(fmt.Sprintf("Unable to create server. Error: %v.", err), 1)

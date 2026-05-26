@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/objstore/blob"
+	"go.temporal.io/server/common/persistence/objstore/blob/filefs"
 	"go.temporal.io/server/common/persistence/objstore/blob/memfs"
 	s3blob "go.temporal.io/server/common/persistence/objstore/blob/s3"
 )
@@ -40,7 +41,7 @@ import (
 // tooling that builds factories without going through the YAML path.
 type Options struct {
 	// Backend selects the blob.Store implementation. Required.
-	// Supported: "s3", "memfs".
+	// Supported: "s3", "memfs", "filefs".
 	Backend string
 
 	// S3 options — only consulted when Backend == "s3".
@@ -50,6 +51,10 @@ type Options struct {
 	AccessKey string
 	Secret    string
 	PathStyle bool
+
+	// FilefsRoot is the directory used by the "filefs" backend.
+	// Required when Backend == "filefs".
+	FilefsRoot string
 }
 
 // parseOptions extracts an [Options] from the loosely-typed
@@ -59,13 +64,14 @@ func parseOptions(raw map[string]any) (Options, error) {
 		return Options{}, errors.New("objstore: customDatastore.options is required")
 	}
 	out := Options{
-		Backend:   stringOpt(raw, "backend"),
-		Bucket:    stringOpt(raw, "bucket"),
-		Region:    stringOpt(raw, "region"),
-		Endpoint:  stringOpt(raw, "endpoint"),
-		AccessKey: stringOpt(raw, "accessKey"),
-		Secret:    stringOpt(raw, "secret"),
-		PathStyle: boolOpt(raw, "pathStyle"),
+		Backend:    stringOpt(raw, "backend"),
+		Bucket:     stringOpt(raw, "bucket"),
+		Region:     stringOpt(raw, "region"),
+		Endpoint:   stringOpt(raw, "endpoint"),
+		AccessKey:  stringOpt(raw, "accessKey"),
+		Secret:     stringOpt(raw, "secret"),
+		PathStyle:  boolOpt(raw, "pathStyle"),
+		FilefsRoot: stringOpt(raw, "filefsRoot"),
 	}
 	if out.Backend == "" {
 		return Options{}, errors.New("objstore: options.backend is required (s3 or memfs)")
@@ -97,10 +103,20 @@ func boolOpt(raw map[string]any, key string) bool {
 
 // newBlobStore builds a [blob.Store] from parsed [Options]. Exposed
 // to tests; production callers go through the factory.
+//
+// memfs is per-instance (each Factory gets its own map) and so works
+// ONLY for single-scope usage like unit tests. For a multi-service
+// temporal-server process where each service constructs its own
+// factory, use filefs (or s3) — both provide shared state.
 func newBlobStore(ctx context.Context, opts Options) (blob.Store, error) {
 	switch opts.Backend {
 	case "memfs":
 		return memfs.New(), nil
+	case "filefs":
+		if opts.FilefsRoot == "" {
+			return nil, errors.New("objstore: filefs backend requires filefsRoot option")
+		}
+		return filefs.New(opts.FilefsRoot)
 	case "s3":
 		return s3blob.New(ctx, s3blob.Config{
 			Bucket:    opts.Bucket,
@@ -111,7 +127,7 @@ func newBlobStore(ctx context.Context, opts Options) (blob.Store, error) {
 			PathStyle: opts.PathStyle,
 		})
 	default:
-		return nil, fmt.Errorf("objstore: unsupported backend %q (want one of: s3, memfs)", opts.Backend)
+		return nil, fmt.Errorf("objstore: unsupported backend %q (want one of: s3, filefs, memfs)", opts.Backend)
 	}
 }
 
