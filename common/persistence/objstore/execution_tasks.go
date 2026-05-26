@@ -57,7 +57,14 @@ type replicationDLQEnv struct {
 // All tasks in one request are durable when the function returns;
 // the matching / history service then re-reads them via GetHistoryTasks.
 func (e *executionStore) addHistoryTasks(ctx context.Context, request *persistence.InternalAddHistoryTasksRequest) error {
-	for category, taskList := range request.Tasks {
+	return e.writeHistoryTaskMap(ctx, request.ShardID, request.Tasks)
+}
+
+// writeHistoryTaskMap is the common path used by both AddHistoryTasks
+// and the Create/Update workflow paths (which carry Tasks inside the
+// snapshot/mutation).
+func (e *executionStore) writeHistoryTaskMap(ctx context.Context, shardID int32, taskMap map[tasks.Category][]persistence.InternalHistoryTask) error {
+	for category, taskList := range taskMap {
 		for _, task := range taskList {
 			env := historyTaskEnv{
 				FireTimeNs: task.Key.FireTime.UnixNano(),
@@ -68,7 +75,7 @@ func (e *executionStore) addHistoryTasks(ctx context.Context, request *persisten
 			if err != nil {
 				return fmt.Errorf("marshal history task: %w", err)
 			}
-			key := historyTaskKey(request.ShardID, category.ID(), task.Key.FireTime, task.Key.TaskID)
+			key := historyTaskKey(shardID, category.ID(), task.Key.FireTime, task.Key.TaskID)
 			if _, err := e.blob.Put(ctx, key, body, blob.PutOptions{
 				ContentType: "application/json",
 			}); err != nil {

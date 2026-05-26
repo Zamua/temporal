@@ -280,7 +280,7 @@ func TestExecutionStore_Update_AppliesMutation(t *testing.T) {
 		NextEventID:        5,
 		LastWriteVersion:   1,
 		DBRecordVersion:    2,
-		Condition:          1, // must match stored DBRecordVersion
+		Condition:          2, // must match stored NextEventID (set to 2 by sampleSnapshot)
 		UpsertActivityInfos: map[int64]*commonpb.DataBlob{
 			2: {EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: []byte("activity-2")},
 		},
@@ -418,7 +418,8 @@ func TestExecutionStore_ContinueAsNew_SwitchesCurrentRun(t *testing.T) {
 		RunID:              "run1",
 		ExecutionInfoBlob:  snap.ExecutionInfoBlob,
 		ExecutionStateBlob: snap.ExecutionStateBlob,
-		Condition:          1,
+		Condition:          2, // match stored NextEventID
+		NextEventID:        3,
 		DBRecordVersion:    2,
 		LastWriteVersion:   1,
 	}

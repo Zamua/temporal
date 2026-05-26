@@ -154,6 +154,19 @@ func (e *executionStore) CreateWorkflowExecution(
 		return nil, serviceerror.NewInternalf("objstore: CreateWorkflowExecution: unknown mode: %v", request.Mode)
 	}
 
+	// Persist any history tasks the caller batched in with the
+	// snapshot. Cassandra's `applyWorkflowSnapshotBatchAsNew` does
+	// this in the same write batch — we do it as a follow-up since
+	// objstore has no multi-object transaction primitive. Worst-case
+	// crash here leaves an orphan workflow with no transfer task,
+	// which the matching service treats as "stuck" and the queue
+	// scanner ultimately recovers from on shard re-init.
+	if len(snap.Tasks) > 0 {
+		if err := e.writeHistoryTaskMap(ctx, request.ShardID, snap.Tasks); err != nil {
+			return nil, fmt.Errorf("objstore: write snapshot tasks: %w", err)
+		}
+	}
+
 	return &persistence.InternalCreateWorkflowExecutionResponse{}, nil
 }
 
@@ -174,11 +187,16 @@ func (e *executionStore) UpdateWorkflowExecution(
 		return fmt.Errorf("objstore: read snapshot for update: %w", err)
 	}
 
-	// CAS predicate: stored DBRecordVersion must match the mutation's
-	// Condition (the value the caller read on its last GetWorkflowExecution).
-	if mutation.Condition != 0 && env.DBRecordVersion != mutation.Condition {
+	// CAS predicate: matches cassandra's pattern of comparing the
+	// caller's Condition (the previous NextEventID the caller had
+	// when it built this mutation) against the stored NextEventID.
+	// DBRecordVersion is a separate, newer mechanism; we leave it
+	// as a passthrough store value and let the caller mediate
+	// invariants on it. Skipping the check entirely when Condition
+	// is zero matches cassandra's behavior for initial-write paths.
+	if mutation.Condition != 0 && env.NextEventID != mutation.Condition {
 		return &persistence.WorkflowConditionFailedError{
-			Msg:             fmt.Sprintf("objstore: DBRecordVersion mismatch (stored=%d, expected=%d)", env.DBRecordVersion, mutation.Condition),
+			Msg:             fmt.Sprintf("objstore: NextEventID mismatch (stored=%d, expected=%d)", env.NextEventID, mutation.Condition),
 			NextEventID:     env.NextEventID,
 			DBRecordVersion: env.DBRecordVersion,
 		}
@@ -206,6 +224,13 @@ func (e *executionStore) UpdateWorkflowExecution(
 		return fmt.Errorf("objstore: put updated snapshot: %w", err)
 	}
 
+	// Persist any history tasks attached to the mutation.
+	if len(mutation.Tasks) > 0 {
+		if err := e.writeHistoryTaskMap(ctx, request.ShardID, mutation.Tasks); err != nil {
+			return fmt.Errorf("objstore: write mutation tasks: %w", err)
+		}
+	}
+
 	// Mode-specific: when this update is a continue-as-new, the
 	// caller hands us a NewWorkflowSnapshot. Persist the new run's
 	// snapshot and (for UpdateCurrent mode) swing current_run to it.
@@ -223,6 +248,11 @@ func (e *executionStore) UpdateWorkflowExecution(
 			IfNoneMatch: "*",
 		}); err != nil && !errors.Is(err, blob.ErrPreconditionFailed) {
 			return fmt.Errorf("objstore: put new-run snapshot: %w", err)
+		}
+		if len(newSnap.Tasks) > 0 {
+			if err := e.writeHistoryTaskMap(ctx, request.ShardID, newSnap.Tasks); err != nil {
+				return fmt.Errorf("objstore: write new-run snapshot tasks: %w", err)
+			}
 		}
 		if request.Mode == persistence.UpdateWorkflowModeUpdateCurrent {
 			if err := e.updateCurrentRun(ctx, &newSnap, mutation.RunID, mutation.LastWriteVersion); err != nil {
@@ -260,6 +290,11 @@ func (e *executionStore) ConflictResolveWorkflowExecution(
 	}); err != nil {
 		return fmt.Errorf("put reset snapshot: %w", err)
 	}
+	if len(reset.Tasks) > 0 {
+		if err := e.writeHistoryTaskMap(ctx, request.ShardID, reset.Tasks); err != nil {
+			return fmt.Errorf("objstore: write reset tasks: %w", err)
+		}
+	}
 
 	// New run, if any.
 	if request.NewWorkflowSnapshot != nil {
@@ -275,6 +310,11 @@ func (e *executionStore) ConflictResolveWorkflowExecution(
 			ContentType: "application/json",
 		}); err != nil {
 			return fmt.Errorf("put new snapshot: %w", err)
+		}
+		if len(newSnap.Tasks) > 0 {
+			if err := e.writeHistoryTaskMap(ctx, request.ShardID, newSnap.Tasks); err != nil {
+				return fmt.Errorf("objstore: write conflict-resolve new tasks: %w", err)
+			}
 		}
 	}
 
@@ -401,6 +441,11 @@ func (e *executionStore) SetWorkflowExecution(
 		ContentType: "application/json",
 	}); err != nil {
 		return fmt.Errorf("objstore: put set snapshot: %w", err)
+	}
+	if len(snap.Tasks) > 0 {
+		if err := e.writeHistoryTaskMap(ctx, request.ShardID, snap.Tasks); err != nil {
+			return fmt.Errorf("objstore: write set snapshot tasks: %w", err)
+		}
 	}
 	return nil
 }
