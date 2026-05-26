@@ -69,16 +69,16 @@ func (f *Factory) Close() {
 	// add a Close() method to blob.Store and dispatch here.
 }
 
-// NewTaskStore returns the persistence.TaskStore. Unimplemented
-// until task_store.go lands.
+// NewTaskStore returns the persistence.TaskStore.
 func (f *Factory) NewTaskStore() (persistence.TaskStore, error) {
-	return nil, serviceerror.NewUnimplemented("objstore: TaskStore not yet implemented")
+	return newTaskStore(f.blob), nil
 }
 
 // NewFairTaskStore returns the fair-task persistence.TaskStore.
-// Unimplemented until fair-task support lands.
+// Same impl as TaskStore today — fair-vs-classic is a behavioral
+// distinction at the matching service layer, not at persistence.
 func (f *Factory) NewFairTaskStore() (persistence.TaskStore, error) {
-	return nil, serviceerror.NewUnimplemented("objstore: FairTaskStore not yet implemented")
+	return newTaskStore(f.blob), nil
 }
 
 // NewShardStore returns the persistence.ShardStore backed by the

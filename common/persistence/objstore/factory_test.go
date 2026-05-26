@@ -2,38 +2,46 @@ package objstore_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/objstore"
 	"go.temporal.io/server/common/persistence/objstore/blob"
 	"go.temporal.io/server/common/persistence/objstore/blob/memfs"
 )
 
-// TestFactoryReturnsUnimplementedForUnwiredStores documents the
-// MVP behavior: the factory satisfies persistence.DataStoreFactory,
-// but every store returns Unimplemented until its own file lands.
-// fx.go's managerProvider treats this as "skip this manager" rather
-// than fatal, so a temporal-server can boot with a partial backend.
-func TestFactoryReturnsUnimplementedForUnwiredStores(t *testing.T) {
+// TestFactoryWiresAllStores smoke-checks that Factory.New*Store all
+// hand back real implementations (none of them return Unimplemented
+// today). The fx managerProvider used to expect Unimplemented for
+// any stub — leaving this test in place ensures regressions don't
+// silently un-wire a store.
+func TestFactoryWiresAllStores(t *testing.T) {
 	f := objstore.NewFactory(memfs.New(), "active", log.NewNoopLogger())
 
+	// All stores are now real — this test reads as a smoke check
+	// that every Factory.New* returns nil-error + non-nil store.
 	cases := []struct {
 		name string
-		call func() error
+		call func() (any, error)
 	}{
-		{"TaskStore", func() error { _, err := f.NewTaskStore(); return err }},
-		{"FairTaskStore", func() error { _, err := f.NewFairTaskStore(); return err }},
+		{"TaskStore", func() (any, error) { return f.NewTaskStore() }},
+		{"FairTaskStore", func() (any, error) { return f.NewFairTaskStore() }},
+		{"ShardStore", func() (any, error) { return f.NewShardStore() }},
+		{"MetadataStore", func() (any, error) { return f.NewMetadataStore() }},
+		{"ExecutionStore", func() (any, error) { return f.NewExecutionStore() }},
+		{"QueueV2", func() (any, error) { return f.NewQueueV2() }},
+		{"ClusterMetadataStore", func() (any, error) { return f.NewClusterMetadataStore() }},
+		{"NexusEndpointStore", func() (any, error) { return f.NewNexusEndpointStore() }},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := tc.call()
-			var unimpl *serviceerror.Unimplemented
-			if !errors.As(err, &unimpl) {
-				t.Fatalf("expected serviceerror.Unimplemented from %s, got %v", tc.name, err)
+			store, err := tc.call()
+			if err != nil {
+				t.Fatalf("%s returned err: %v", tc.name, err)
+			}
+			if store == nil {
+				t.Fatalf("%s returned nil store", tc.name)
 			}
 		})
 	}
