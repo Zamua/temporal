@@ -1,0 +1,123 @@
+package objstore
+
+import (
+	"context"
+
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/objstore/blob"
+)
+
+// Factory is the objstore implementation of
+// [persistence.DataStoreFactory]. Every New*Store method below
+// returns a per-store adapter that goes through the same underlying
+// [blob.Store]. Stores start as Unimplemented and get lit up one at
+// a time — see the per-store files (`shard_store.go`,
+// `execution_store.go`, …) as they land.
+//
+// fx.go's `managerProvider` treats [serviceerror.Unimplemented]
+// returned by Factory.New*Store as "not wired" and skips the
+// manager rather than fatal-erroring at boot. This lets us merge
+// the factory before every store is implemented.
+type Factory struct {
+	blob        blob.Store
+	clusterName string
+	logger      log.Logger
+}
+
+// NewFactory constructs a [Factory] from a pre-built [blob.Store].
+// Use this directly in tests (with a memfs store); production
+// callers go through [NewAbstractFactory] → CustomDatastoreConfig.
+func NewFactory(blobStore blob.Store, clusterName string, logger log.Logger) *Factory {
+	return &Factory{
+		blob:        blobStore,
+		clusterName: clusterName,
+		logger:      logger,
+	}
+}
+
+// Close releases the underlying [blob.Store] (no-op for memfs;
+// flushes pending writes for S3). Safe to call multiple times.
+func (f *Factory) Close() {
+	// Nothing to do today — blob.Store has no Close method
+	// because S3/MinIO clients pool connections lazily and don't
+	// need explicit shutdown. If a future backend needs cleanup,
+	// add a Close() method to blob.Store and dispatch here.
+}
+
+// NewTaskStore returns the persistence.TaskStore. Unimplemented
+// until task_store.go lands.
+func (f *Factory) NewTaskStore() (persistence.TaskStore, error) {
+	return nil, serviceerror.NewUnimplemented("objstore: TaskStore not yet implemented")
+}
+
+// NewFairTaskStore returns the fair-task persistence.TaskStore.
+// Unimplemented until fair-task support lands.
+func (f *Factory) NewFairTaskStore() (persistence.TaskStore, error) {
+	return nil, serviceerror.NewUnimplemented("objstore: FairTaskStore not yet implemented")
+}
+
+// NewShardStore returns the persistence.ShardStore backed by the
+// factory's blob.Store. Layout: shards/{cluster}/{shardID}/info.
+func (f *Factory) NewShardStore() (persistence.ShardStore, error) {
+	return newShardStore(f.blob, f.clusterName), nil
+}
+
+// NewMetadataStore returns the persistence.MetadataStore (namespaces).
+// Unimplemented until metadata_store.go lands.
+func (f *Factory) NewMetadataStore() (persistence.MetadataStore, error) {
+	return nil, serviceerror.NewUnimplemented("objstore: MetadataStore not yet implemented")
+}
+
+// NewExecutionStore returns the persistence.ExecutionStore. Wired
+// today as a scaffold — DeleteWorkflowExecution + DeleteCurrentWorkflowExecution
+// are real; the rest are per-method Unimplemented stubs landing
+// across tasks #282, #288, #289, #290.
+func (f *Factory) NewExecutionStore() (persistence.ExecutionStore, error) {
+	return newExecutionStore(f.blob, f.clusterName), nil
+}
+
+// NewQueue returns the persistence.Queue. Unimplemented until
+// queue_store.go lands.
+func (f *Factory) NewQueue(queueType persistence.QueueType) (persistence.Queue, error) {
+	_ = queueType
+	return nil, serviceerror.NewUnimplemented("objstore: Queue not yet implemented")
+}
+
+// NewQueueV2 returns the persistence.QueueV2. Unimplemented until
+// queue_v2_store.go lands.
+func (f *Factory) NewQueueV2() (persistence.QueueV2, error) {
+	return nil, serviceerror.NewUnimplemented("objstore: QueueV2 not yet implemented")
+}
+
+// NewClusterMetadataStore returns the persistence.ClusterMetadataStore.
+// Unimplemented until cluster_metadata_store.go lands.
+func (f *Factory) NewClusterMetadataStore() (persistence.ClusterMetadataStore, error) {
+	return nil, serviceerror.NewUnimplemented("objstore: ClusterMetadataStore not yet implemented")
+}
+
+// NewNexusEndpointStore returns the persistence.NexusEndpointStore.
+// Unimplemented until nexus_endpoint_store.go lands.
+func (f *Factory) NewNexusEndpointStore() (persistence.NexusEndpointStore, error) {
+	return nil, serviceerror.NewUnimplemented("objstore: NexusEndpointStore not yet implemented")
+}
+
+// Blob is the test seam — returns the underlying [blob.Store] so
+// per-store tests can introspect what's been written.
+func (f *Factory) Blob() blob.Store { return f.blob }
+
+// ensureBlobReady is the hook every store entrypoint will call
+// once they're real — fails fast if the underlying blob.Store
+// wasn't built. Today no store calls it (all are Unimplemented);
+// kept here so the seam is obvious.
+func (f *Factory) ensureBlobReady(ctx context.Context) error {
+	_ = ctx
+	if f.blob == nil {
+		f.logger.Error("objstore: blob store is nil — factory was not initialized via NewFactory",
+			tag.NewStringTag("backend", "unknown"))
+		return serviceerror.NewInternal("objstore: blob store not initialized")
+	}
+	return nil
+}
