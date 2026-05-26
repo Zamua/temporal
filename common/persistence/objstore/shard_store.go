@@ -208,9 +208,9 @@ func (s *shardStore) readEnvelope(ctx context.Context, key string) (shardEnvelop
 // layer expects. Encoding strings come from EncodingType.String();
 // the enums package's _value map is the inverse.
 func envelopeToBlob(env shardEnvelope) *commonpb.DataBlob {
-	enc := enumspb.EncodingType_value[env.Encoding]
+	enc, _ := enumspb.EncodingTypeFromString(env.Encoding)
 	return &commonpb.DataBlob{
-		EncodingType: enumspb.EncodingType(enc),
+		EncodingType: enc,
 		Data:         env.Data,
 	}
 }

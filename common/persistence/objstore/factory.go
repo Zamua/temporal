@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/objstore/blob"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 // Factory is the objstore implementation of
@@ -25,16 +26,37 @@ type Factory struct {
 	blob        blob.Store
 	clusterName string
 	logger      log.Logger
+	serializer  serialization.Serializer
 }
 
 // NewFactory constructs a [Factory] from a pre-built [blob.Store].
 // Use this directly in tests (with a memfs store); production
 // callers go through [NewAbstractFactory] → CustomDatastoreConfig.
+//
+// A nil serializer is allowed and gets replaced with the default —
+// tests rarely care about which serializer is in use, and the
+// default handles all the encoding types Temporal hands out.
 func NewFactory(blobStore blob.Store, clusterName string, logger log.Logger) *Factory {
 	return &Factory{
 		blob:        blobStore,
 		clusterName: clusterName,
 		logger:      logger,
+		serializer:  serialization.NewSerializer(),
+	}
+}
+
+// NewFactoryWithSerializer is the variant used by the abstract
+// factory — when fx wires us in, it provides the global
+// [serialization.Serializer] instance.
+func NewFactoryWithSerializer(blobStore blob.Store, clusterName string, logger log.Logger, serializer serialization.Serializer) *Factory {
+	if serializer == nil {
+		serializer = serialization.NewSerializer()
+	}
+	return &Factory{
+		blob:        blobStore,
+		clusterName: clusterName,
+		logger:      logger,
+		serializer:  serializer,
 	}
 }
 
@@ -71,12 +93,13 @@ func (f *Factory) NewMetadataStore() (persistence.MetadataStore, error) {
 	return nil, serviceerror.NewUnimplemented("objstore: MetadataStore not yet implemented")
 }
 
-// NewExecutionStore returns the persistence.ExecutionStore. Wired
-// today as a scaffold — DeleteWorkflowExecution + DeleteCurrentWorkflowExecution
-// are real; the rest are per-method Unimplemented stubs landing
-// across tasks #282, #288, #289, #290.
+// NewExecutionStore returns the persistence.ExecutionStore. The
+// happy-path methods (Create/Get/Update/Set/Delete/GetCurrent) are
+// live; the deferred subsets (history V2 branches, task queues,
+// DLQ, conflict resolve, list-concrete) are per-method Unimplemented
+// stubs landing in #288/#289/#290.
 func (f *Factory) NewExecutionStore() (persistence.ExecutionStore, error) {
-	return newExecutionStore(f.blob, f.clusterName), nil
+	return newExecutionStore(f.blob, f.clusterName, f.serializer), nil
 }
 
 // NewQueue returns the persistence.Queue. Unimplemented until

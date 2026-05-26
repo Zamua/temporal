@@ -49,7 +49,6 @@ func (a *AbstractFactory) NewFactory(
 ) persistence.DataStoreFactory {
 	_ = r
 	_ = metricsHandler
-	_ = serializer
 
 	opts, err := parseOptions(cfg.Options)
 	if err != nil {
@@ -64,7 +63,7 @@ func (a *AbstractFactory) NewFactory(
 	logger.Info("objstore: persistence factory initialized",
 		tag.NewStringTag("backend", opts.Backend),
 		tag.NewStringTag("bucket", opts.Bucket))
-	return NewFactory(store, clusterName, logger)
+	return NewFactoryWithSerializer(store, clusterName, logger, serializer)
 }
 
 // Verify at compile-time that AbstractFactory satisfies the
