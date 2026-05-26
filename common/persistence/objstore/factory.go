@@ -101,11 +101,11 @@ func (f *Factory) NewExecutionStore() (persistence.ExecutionStore, error) {
 	return newExecutionStore(f.blob, f.clusterName, f.serializer), nil
 }
 
-// NewQueue returns the persistence.Queue. Unimplemented until
-// queue_store.go lands.
+// NewQueue returns the persistence.Queue (legacy queue interface,
+// used for NamespaceReplicationQueue and similar single-queue-per-type
+// channels). QueueV2 is the modern interface for most callers.
 func (f *Factory) NewQueue(queueType persistence.QueueType) (persistence.Queue, error) {
-	_ = queueType
-	return nil, serviceerror.NewUnimplemented("objstore: Queue not yet implemented")
+	return newQueueV1Store(f.blob, queueType), nil
 }
 
 // NewQueueV2 returns the persistence.QueueV2.
