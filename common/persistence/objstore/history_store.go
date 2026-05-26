@@ -37,25 +37,19 @@ import (
 // shadowed.
 
 func historyNodeKey(treeID, branchID string, nodeID, txnID int64) string {
-	// txnIDs may be negative in some race scenarios — clamp to int64
-	// max-encodable form via signed-fixed-width via two's-complement
-	// "padded decimal" is fine because cassandra also stores them
-	// sorted natively as int64. We zero-pad the absolute value with
-	// a leading 'n' for negatives — this preserves total order over
-	// (positives ≻ negatives) which mirrors Cassandra's CLUSTERING ASC.
-	return fmt.Sprintf("history/nodes/%s/%s/%020d-%s", treeID, branchID, nodeID, fixedWidthTxn(txnID))
+	return fmt.Sprintf("history/nodes/%s/%s/%020d-%s", safeID(treeID), safeID(branchID), nodeID, fixedWidthTxn(txnID))
 }
 
 func historyNodePrefix(treeID, branchID string) string {
-	return fmt.Sprintf("history/nodes/%s/%s/", treeID, branchID)
+	return fmt.Sprintf("history/nodes/%s/%s/", safeID(treeID), safeID(branchID))
 }
 
 func historyBranchKey(treeID, branchID string) string {
-	return fmt.Sprintf("history/trees/%s/branches/%s", treeID, branchID)
+	return fmt.Sprintf("history/trees/%s/branches/%s", safeID(treeID), safeID(branchID))
 }
 
 func historyTreeBranchesPrefix(treeID string) string {
-	return fmt.Sprintf("history/trees/%s/branches/", treeID)
+	return fmt.Sprintf("history/trees/%s/branches/", safeID(treeID))
 }
 
 func historyAllTreesPrefix() string {

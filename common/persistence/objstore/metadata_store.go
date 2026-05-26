@@ -50,8 +50,8 @@ type metadataNotificationEnv struct {
 	NotificationVersion int64 `json:"nv"`
 }
 
-func namespaceIDKey(id string) string     { return "namespaces/by-id/" + id }
-func namespaceNameKey(name string) string { return "namespaces/by-name/" + name }
+func namespaceIDKey(id string) string     { return "namespaces/by-id/" + safeID(id) }
+func namespaceNameKey(name string) string { return "namespaces/by-name/" + safeID(name) }
 
 const metadataNotificationKey = "namespaces/metadata"
 

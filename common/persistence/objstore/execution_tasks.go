@@ -34,11 +34,11 @@ func historyTaskPrefix(shardID int32, categoryID int) string {
 }
 
 func dlqTaskKey(sourceCluster string, shardID int32, fireTime time.Time, taskID int64) string {
-	return fmt.Sprintf("dlq/replication/%s/%d/%020d-%020d", sourceCluster, shardID, fireTime.UnixNano(), taskID)
+	return fmt.Sprintf("dlq/replication/%s/%d/%020d-%020d", safeID(sourceCluster), shardID, fireTime.UnixNano(), taskID)
 }
 
 func dlqTaskPrefix(sourceCluster string, shardID int32) string {
-	return fmt.Sprintf("dlq/replication/%s/%d/", sourceCluster, shardID)
+	return fmt.Sprintf("dlq/replication/%s/%d/", safeID(sourceCluster), shardID)
 }
 
 type historyTaskEnv struct {

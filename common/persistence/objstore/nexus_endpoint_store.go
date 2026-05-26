@@ -45,7 +45,7 @@ type nexusTableVersionEnv struct {
 const nexusTableVersionKey = "nexus/table-version"
 
 func nexusEndpointKey(id string) string {
-	return "nexus/endpoints/" + id
+	return "nexus/endpoints/" + safeID(id)
 }
 
 func (n *nexusEndpointStore) CreateOrUpdateNexusEndpoint(ctx context.Context, request *persistence.InternalCreateOrUpdateNexusEndpointRequest) error {

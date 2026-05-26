@@ -52,7 +52,7 @@ type clusterMemberEnv struct {
 	RecordExpiry  time.Time `json:"exp"`
 }
 
-func clusterMetadataKey(name string) string { return "cluster-metadata/" + name }
+func clusterMetadataKey(name string) string { return "cluster-metadata/" + safeID(name) }
 func clusterMemberKey(hostID []byte) string {
 	return "cluster-members/by-id/" + hex.EncodeToString(hostID)
 }

@@ -80,11 +80,11 @@ func (e *executionStore) GetHistoryBranchUtil() persistence.HistoryBranchUtil {
 // --- key layout helpers ---
 
 func executionCurrentRunKey(namespaceID, workflowID string) string {
-	return fmt.Sprintf("executions/%s/%s/current_run", namespaceID, workflowID)
+	return fmt.Sprintf("executions/%s/%s/current_run", safeID(namespaceID), safeID(workflowID))
 }
 
 func executionSnapshotKey(namespaceID, workflowID, runID string) string {
-	return fmt.Sprintf("executions/%s/%s/runs/%s/snapshot", namespaceID, workflowID, runID)
+	return fmt.Sprintf("executions/%s/%s/runs/%s/snapshot", safeID(namespaceID), safeID(workflowID), safeID(runID))
 }
 
 // --- workflow execution lifecycle (Create / Get / Update / Set / Delete) ---

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url" //nolint:depguard // local helper used here
 	"sort"
 	"strconv"
 	"strings"
@@ -68,12 +69,17 @@ type userDataEnv struct {
 
 // --- key layout ---
 
+// safeID lives in keys.go — escapes caller-supplied identifiers for
+// safe embedding in S3 / MinIO keys. Task queue names can include
+// "/" (partition syntax: "/_sys/tq/2") which would create double
+// slashes that MinIO rejects.
+
 func taskQueueMetaKey(ns, tq string, tt enumspb.TaskQueueType) string {
-	return fmt.Sprintf("tasks/%s/%d/%s/meta", ns, tt, tq)
+	return fmt.Sprintf("tasks/%s/%d/%s/meta", ns, tt, safeID(tq))
 }
 
 func taskItemsPrefix(ns, tq string, tt enumspb.TaskQueueType) string {
-	return fmt.Sprintf("tasks/%s/%d/%s/items/", ns, tt, tq)
+	return fmt.Sprintf("tasks/%s/%d/%s/items/", ns, tt, safeID(tq))
 }
 
 func taskItemKey(ns, tq string, tt enumspb.TaskQueueType, subqueue int, pass, taskID int64) string {
@@ -81,7 +87,7 @@ func taskItemKey(ns, tq string, tt enumspb.TaskQueueType, subqueue int, pass, ta
 }
 
 func taskUserDataKey(ns, tq string) string {
-	return fmt.Sprintf("tasks/%s/user-data/%s", ns, tq)
+	return fmt.Sprintf("tasks/%s/user-data/%s", ns, safeID(tq))
 }
 
 func taskUserDataPrefix(ns string) string {
@@ -89,11 +95,11 @@ func taskUserDataPrefix(ns string) string {
 }
 
 func buildIdMarkerKey(ns, buildID, tq string) string {
-	return fmt.Sprintf("tasks/%s/build-ids/%s/%s", ns, buildID, tq)
+	return fmt.Sprintf("tasks/%s/build-ids/%s/%s", ns, safeID(buildID), safeID(tq))
 }
 
 func buildIdPrefix(ns, buildID string) string {
-	return fmt.Sprintf("tasks/%s/build-ids/%s/", ns, buildID)
+	return fmt.Sprintf("tasks/%s/build-ids/%s/", ns, safeID(buildID))
 }
 
 // --- task queue lifecycle ---
@@ -511,7 +517,11 @@ func (t *taskStore) ListTaskQueueUserDataEntries(ctx context.Context, request *p
 	}
 	out := make([]persistence.InternalTaskQueueUserDataEntry, 0, len(infos))
 	for _, info := range infos {
-		tq := strings.TrimPrefix(info.Key, taskUserDataPrefix(request.NamespaceID))
+		escaped := strings.TrimPrefix(info.Key, taskUserDataPrefix(request.NamespaceID))
+		tq, err := url.PathUnescape(escaped)
+		if err != nil {
+			tq = escaped
+		}
 		body, err := readBlobBody(ctx, t.blob, info.Key)
 		if err != nil {
 			return nil, fmt.Errorf("read user data: %w", err)
@@ -538,7 +548,11 @@ func (t *taskStore) GetTaskQueuesByBuildId(ctx context.Context, request *persist
 	}
 	out := make([]string, 0, len(infos))
 	for _, info := range infos {
-		tq := strings.TrimPrefix(info.Key, buildIdPrefix(request.NamespaceID, request.BuildID))
+		escaped := strings.TrimPrefix(info.Key, buildIdPrefix(request.NamespaceID, request.BuildID))
+		tq, err := url.PathUnescape(escaped)
+		if err != nil {
+			tq = escaped
+		}
 		out = append(out, tq)
 	}
 	return out, nil
