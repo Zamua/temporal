@@ -157,13 +157,20 @@ func (e *executionStore) CreateWorkflowExecution(
 	// Persist any history tasks the caller batched in with the
 	// snapshot. Cassandra's `applyWorkflowSnapshotBatchAsNew` does
 	// this in the same write batch — we do it as a follow-up since
-	// objstore has no multi-object transaction primitive. Worst-case
-	// crash here leaves an orphan workflow with no transfer task,
-	// which the matching service treats as "stuck" and the queue
-	// scanner ultimately recovers from on shard re-init.
+	// objstore has no multi-object transaction primitive.
 	if len(snap.Tasks) > 0 {
 		if err := e.writeHistoryTaskMap(ctx, request.ShardID, snap.Tasks); err != nil {
 			return nil, fmt.Errorf("objstore: write snapshot tasks: %w", err)
+		}
+	}
+
+	// History events that accompany the workflow creation. Cassandra
+	// writes these in the same batch — for objstore we do them as
+	// follow-up persistence calls (each AppendHistoryNodes is an
+	// individual blob write).
+	for _, ev := range request.NewWorkflowNewEvents {
+		if err := e.appendHistoryNodes(ctx, ev); err != nil {
+			return nil, fmt.Errorf("objstore: append history nodes for create: %w", err)
 		}
 	}
 
@@ -231,6 +238,18 @@ func (e *executionStore) UpdateWorkflowExecution(
 		}
 	}
 
+	// Persist history events for the update transaction.
+	for _, ev := range request.UpdateWorkflowNewEvents {
+		if err := e.appendHistoryNodes(ctx, ev); err != nil {
+			return fmt.Errorf("objstore: append history nodes for update: %w", err)
+		}
+	}
+	for _, ev := range request.NewWorkflowNewEvents {
+		if err := e.appendHistoryNodes(ctx, ev); err != nil {
+			return fmt.Errorf("objstore: append history nodes for update.new: %w", err)
+		}
+	}
+
 	// Mode-specific: when this update is a continue-as-new, the
 	// caller hands us a NewWorkflowSnapshot. Persist the new run's
 	// snapshot and (for UpdateCurrent mode) swing current_run to it.
@@ -293,6 +312,21 @@ func (e *executionStore) ConflictResolveWorkflowExecution(
 	if len(reset.Tasks) > 0 {
 		if err := e.writeHistoryTaskMap(ctx, request.ShardID, reset.Tasks); err != nil {
 			return fmt.Errorf("objstore: write reset tasks: %w", err)
+		}
+	}
+	for _, ev := range request.ResetWorkflowEventsNewEvents {
+		if err := e.appendHistoryNodes(ctx, ev); err != nil {
+			return fmt.Errorf("objstore: append reset history nodes: %w", err)
+		}
+	}
+	for _, ev := range request.NewWorkflowEventsNewEvents {
+		if err := e.appendHistoryNodes(ctx, ev); err != nil {
+			return fmt.Errorf("objstore: append conflict-resolve new history nodes: %w", err)
+		}
+	}
+	for _, ev := range request.CurrentWorkflowEventsNewEvents {
+		if err := e.appendHistoryNodes(ctx, ev); err != nil {
+			return fmt.Errorf("objstore: append conflict-resolve current history nodes: %w", err)
 		}
 	}
 

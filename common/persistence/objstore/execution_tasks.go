@@ -87,7 +87,8 @@ func (e *executionStore) writeHistoryTaskMap(ctx context.Context, shardID int32,
 }
 
 func (e *executionStore) getHistoryTasks(ctx context.Context, request *persistence.GetHistoryTasksRequest) (*persistence.InternalGetHistoryTasksResponse, error) {
-	infos, err := e.blob.List(ctx, historyTaskPrefix(request.ShardID, request.TaskCategory.ID()))
+	prefix := historyTaskPrefix(request.ShardID, request.TaskCategory.ID())
+	infos, err := e.blob.List(ctx, prefix)
 	if err != nil {
 		return nil, fmt.Errorf("list history tasks: %w", err)
 	}
