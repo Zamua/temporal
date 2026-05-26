@@ -531,43 +531,29 @@ func (e *executionStore) IsReplicationDLQEmpty(ctx context.Context, request *per
 // --- history V2 branch APIs (task #288) ---
 
 func (e *executionStore) AppendHistoryNodes(ctx context.Context, request *persistence.InternalAppendHistoryNodesRequest) error {
-	_ = ctx
-	_ = request
-	return serviceerror.NewUnimplemented("objstore: AppendHistoryNodes deferred — task #288")
+	return e.appendHistoryNodes(ctx, request)
 }
 
 func (e *executionStore) DeleteHistoryNodes(ctx context.Context, request *persistence.InternalDeleteHistoryNodesRequest) error {
-	_ = ctx
-	_ = request
-	return serviceerror.NewUnimplemented("objstore: DeleteHistoryNodes deferred — task #288")
+	return e.deleteHistoryNodes(ctx, request)
 }
 
 func (e *executionStore) ReadHistoryBranch(ctx context.Context, request *persistence.InternalReadHistoryBranchRequest) (*persistence.InternalReadHistoryBranchResponse, error) {
-	_ = ctx
-	_ = request
-	return nil, serviceerror.NewUnimplemented("objstore: ReadHistoryBranch deferred — task #288")
+	return e.readHistoryBranch(ctx, request)
 }
 
 func (e *executionStore) ForkHistoryBranch(ctx context.Context, request *persistence.InternalForkHistoryBranchRequest) error {
-	_ = ctx
-	_ = request
-	return serviceerror.NewUnimplemented("objstore: ForkHistoryBranch deferred — task #288")
+	return e.forkHistoryBranch(ctx, request)
 }
 
 func (e *executionStore) DeleteHistoryBranch(ctx context.Context, request *persistence.InternalDeleteHistoryBranchRequest) error {
-	_ = ctx
-	_ = request
-	return serviceerror.NewUnimplemented("objstore: DeleteHistoryBranch deferred — task #288")
+	return e.deleteHistoryBranch(ctx, request)
 }
 
 func (e *executionStore) GetHistoryTreeContainingBranch(ctx context.Context, request *persistence.InternalGetHistoryTreeContainingBranchRequest) (*persistence.InternalGetHistoryTreeContainingBranchResponse, error) {
-	_ = ctx
-	_ = request
-	return nil, serviceerror.NewUnimplemented("objstore: GetHistoryTreeContainingBranch deferred — task #288")
+	return e.getHistoryTreeContainingBranch(ctx, request)
 }
 
 func (e *executionStore) GetAllHistoryTreeBranches(ctx context.Context, request *persistence.GetAllHistoryTreeBranchesRequest) (*persistence.InternalGetAllHistoryTreeBranchesResponse, error) {
-	_ = ctx
-	_ = request
-	return nil, serviceerror.NewUnimplemented("objstore: GetAllHistoryTreeBranches deferred — task #288")
+	return e.getAllHistoryTreeBranches(ctx, request)
 }
