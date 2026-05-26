@@ -88,9 +88,8 @@ func (f *Factory) NewShardStore() (persistence.ShardStore, error) {
 }
 
 // NewMetadataStore returns the persistence.MetadataStore (namespaces).
-// Unimplemented until metadata_store.go lands.
 func (f *Factory) NewMetadataStore() (persistence.MetadataStore, error) {
-	return nil, serviceerror.NewUnimplemented("objstore: MetadataStore not yet implemented")
+	return newMetadataStore(f.blob), nil
 }
 
 // NewExecutionStore returns the persistence.ExecutionStore. The
@@ -109,22 +108,19 @@ func (f *Factory) NewQueue(queueType persistence.QueueType) (persistence.Queue, 
 	return nil, serviceerror.NewUnimplemented("objstore: Queue not yet implemented")
 }
 
-// NewQueueV2 returns the persistence.QueueV2. Unimplemented until
-// queue_v2_store.go lands.
+// NewQueueV2 returns the persistence.QueueV2.
 func (f *Factory) NewQueueV2() (persistence.QueueV2, error) {
-	return nil, serviceerror.NewUnimplemented("objstore: QueueV2 not yet implemented")
+	return newQueueV2Store(f.blob), nil
 }
 
 // NewClusterMetadataStore returns the persistence.ClusterMetadataStore.
-// Unimplemented until cluster_metadata_store.go lands.
 func (f *Factory) NewClusterMetadataStore() (persistence.ClusterMetadataStore, error) {
-	return nil, serviceerror.NewUnimplemented("objstore: ClusterMetadataStore not yet implemented")
+	return newClusterMetadataStore(f.blob), nil
 }
 
 // NewNexusEndpointStore returns the persistence.NexusEndpointStore.
-// Unimplemented until nexus_endpoint_store.go lands.
 func (f *Factory) NewNexusEndpointStore() (persistence.NexusEndpointStore, error) {
-	return nil, serviceerror.NewUnimplemented("objstore: NexusEndpointStore not yet implemented")
+	return newNexusEndpointStore(f.blob), nil
 }
 
 // Blob is the test seam — returns the underlying [blob.Store] so
