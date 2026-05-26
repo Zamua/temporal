@@ -101,5 +101,5 @@ namespaceDefaults:
       state: "disabled"
 
 dynamicConfigClient:
-  filepath: "config/dynamicconfig/development-sql.yaml"
+  filepath: "/Users/zamua/Dropbox/workspace/macmini/temporal-s3/config/dynamicconfig/development-sql.yaml"
   pollInterval: "10s"
