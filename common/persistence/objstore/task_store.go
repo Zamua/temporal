@@ -446,15 +446,28 @@ func (t *taskStore) UpdateTaskQueueUserData(ctx context.Context, request *persis
 		if current != nil {
 			storedVersion = current.Version
 		}
-		// CAS predicate: stored version must be update.Version-1.
-		if storedVersion+1 != update.Version {
-			if update.Conflicting != nil {
-				*update.Conflicting = true
+		// Cassandra's CAS contract:
+		//   update.Version = 0 → INSERT new row (no existing).
+		//   update.Version > 0 → UPDATE IF stored.version == update.Version,
+		//                        write stored.version = update.Version + 1.
+		// We mirror that here.
+		if update.Version == 0 {
+			if current != nil {
+				if update.Conflicting != nil {
+					*update.Conflicting = true
+				}
+				continue
 			}
-			continue
+		} else {
+			if storedVersion != update.Version {
+				if update.Conflicting != nil {
+					*update.Conflicting = true
+				}
+				continue
+			}
 		}
 		newEnv := userDataEnv{
-			Version:  update.Version,
+			Version:  update.Version + 1,
 			UserData: blobToEnv(update.UserData),
 		}
 		body, err := json.Marshal(newEnv)

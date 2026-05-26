@@ -250,6 +250,35 @@ func (e *executionStore) UpdateWorkflowExecution(
 		}
 	}
 
+	// Cassandra updates the current_run pointer with the latest
+	// ExecutionState on every UpdateCurrent-mode call (not just for
+	// continue-as-new). This keeps GetCurrentExecution returning the
+	// up-to-date state so callers like the workflow_id_dedup path
+	// see Running/Completed instead of Unspecified. The continue-as-new
+	// branch below swings current_run to the new runID; this branch
+	// just refreshes the state on the same runID.
+	if request.Mode == persistence.UpdateWorkflowModeUpdateCurrent &&
+		request.NewWorkflowSnapshot == nil &&
+		mutation.ExecutionStateBlob != nil {
+
+		curPtr, curEtag, curErr := e.readCurrentRun(ctx, mutation.NamespaceID, mutation.WorkflowID)
+		if curErr == nil && curPtr.RunID == mutation.RunID {
+			curPtr.ExecutionState = blobToEnv(mutation.ExecutionStateBlob)
+			curPtr.LastWriteVersion = mutation.LastWriteVersion
+			curPtr.UpdatedAt = time.Now().UnixNano()
+			curBody, mErr := json.Marshal(curPtr)
+			if mErr == nil {
+				_, _ = e.blob.Put(ctx, executionCurrentRunKey(mutation.NamespaceID, mutation.WorkflowID), curBody, blob.PutOptions{
+					ContentType: "application/json",
+					IfMatch:     curEtag,
+				})
+				// Best-effort: a concurrent writer (e.g., continue-as-new
+				// from another goroutine) might race us. The lost write
+				// is fine — the other writer's value is more recent.
+			}
+		}
+	}
+
 	// Mode-specific: when this update is a continue-as-new, the
 	// caller hands us a NewWorkflowSnapshot. Persist the new run's
 	// snapshot and (for UpdateCurrent mode) swing current_run to it.
@@ -560,7 +589,10 @@ func (e *executionStore) createCurrentRun(ctx context.Context, snap *persistence
 	})
 	if errors.Is(err, blob.ErrPreconditionFailed) {
 		// Someone else owns this workflow. Return the existing
-		// pointer's runID so the caller can decide how to react.
+		// pointer's runID + decoded state so callers like
+		// ResolveDuplicateWorkflowID see a real State/Status enum
+		// (not the zero Unspecified) and can branch into the right
+		// ID-reuse / ID-conflict policy.
 		existing, _, readErr := e.readCurrentRun(ctx, snap.NamespaceID, snap.WorkflowID)
 		conflict := &persistence.CurrentWorkflowConditionFailedError{
 			Msg: fmt.Sprintf("objstore: workflow %s/%s already exists", snap.NamespaceID, snap.WorkflowID),
@@ -568,6 +600,7 @@ func (e *executionStore) createCurrentRun(ctx context.Context, snap *persistence
 		if readErr == nil && existing != nil {
 			conflict.RunID = existing.RunID
 			conflict.LastWriteVersion = existing.LastWriteVersion
+			e.populateConflictState(conflict, existing)
 		}
 		return conflict
 	}
@@ -575,6 +608,27 @@ func (e *executionStore) createCurrentRun(ctx context.Context, snap *persistence
 		return fmt.Errorf("objstore: put current_run: %w", err)
 	}
 	return nil
+}
+
+// populateConflictState decodes the existing current_run pointer's
+// ExecutionState blob into the typed State/Status fields the
+// workflow_id_dedup path branches on. Without these, the dedup
+// switch falls through to "Unspecified" → Internal error.
+func (e *executionStore) populateConflictState(conflict *persistence.CurrentWorkflowConditionFailedError, existing *currentRunPtr) {
+	if existing.ExecutionState == nil {
+		return
+	}
+	state, err := e.serializer.WorkflowExecutionStateFromBlob(envToBlob(existing.ExecutionState))
+	if err != nil || state == nil {
+		return
+	}
+	conflict.State = state.State
+	conflict.Status = state.Status
+	conflict.RequestIDs = state.RequestIds
+	if state.StartTime != nil {
+		t := state.StartTime.AsTime()
+		conflict.StartTime = &t
+	}
 }
 
 // updateCurrentRun CAS-swings the current_run pointer from
