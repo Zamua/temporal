@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/persistence/objstore/blob/filefs"
 	"go.temporal.io/server/common/persistence/objstore/blob/memfs"
 	s3blob "go.temporal.io/server/common/persistence/objstore/blob/s3"
+	"go.temporal.io/server/common/persistence/objstore/blob/sharedmem"
 )
 
 // Options is the parsed form of `CustomDatastoreConfig.Options` for
@@ -41,7 +42,7 @@ import (
 // tooling that builds factories without going through the YAML path.
 type Options struct {
 	// Backend selects the blob.Store implementation. Required.
-	// Supported: "s3", "memfs", "filefs".
+	// Supported: "s3", "memfs", "filefs", "sharedmem".
 	Backend string
 
 	// S3 options — only consulted when Backend == "s3".
@@ -55,6 +56,11 @@ type Options struct {
 	// FilefsRoot is the directory used by the "filefs" backend.
 	// Required when Backend == "filefs".
 	FilefsRoot string
+
+	// SharedMemName is the registry key for the "sharedmem" backend.
+	// Multiple factories using the same name share state across fx
+	// scopes in the same process. Defaults to "default" when empty.
+	SharedMemName string
 }
 
 // parseOptions extracts an [Options] from the loosely-typed
@@ -64,14 +70,15 @@ func parseOptions(raw map[string]any) (Options, error) {
 		return Options{}, errors.New("objstore: customDatastore.options is required")
 	}
 	out := Options{
-		Backend:    stringOpt(raw, "backend"),
-		Bucket:     stringOpt(raw, "bucket"),
-		Region:     stringOpt(raw, "region"),
-		Endpoint:   stringOpt(raw, "endpoint"),
-		AccessKey:  stringOpt(raw, "accessKey"),
-		Secret:     stringOpt(raw, "secret"),
-		PathStyle:  boolOpt(raw, "pathStyle"),
-		FilefsRoot: stringOpt(raw, "filefsRoot"),
+		Backend:       stringOpt(raw, "backend"),
+		Bucket:        stringOpt(raw, "bucket"),
+		Region:        stringOpt(raw, "region"),
+		Endpoint:      stringOpt(raw, "endpoint"),
+		AccessKey:     stringOpt(raw, "accessKey"),
+		Secret:        stringOpt(raw, "secret"),
+		PathStyle:     boolOpt(raw, "pathStyle"),
+		FilefsRoot:    stringOpt(raw, "filefsRoot"),
+		SharedMemName: stringOpt(raw, "sharedMemName"),
 	}
 	if out.Backend == "" {
 		return Options{}, errors.New("objstore: options.backend is required (s3 or memfs)")
@@ -112,6 +119,12 @@ func newBlobStore(ctx context.Context, opts Options) (blob.Store, error) {
 	switch opts.Backend {
 	case "memfs":
 		return memfs.New(), nil
+	case "sharedmem":
+		name := opts.SharedMemName
+		if name == "" {
+			name = "default"
+		}
+		return sharedmem.Named(name), nil
 	case "filefs":
 		if opts.FilefsRoot == "" {
 			return nil, errors.New("objstore: filefs backend requires filefsRoot option")

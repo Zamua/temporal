@@ -11,8 +11,8 @@ persistence:
       customDatastore:
         name: objstore
         options:
-          backend: filefs
-          filefsRoot: /tmp/temporal-objstore-data
+          backend: sharedmem
+          sharedMemName: temporal
 
     sqlite-visibility:
       sql:
