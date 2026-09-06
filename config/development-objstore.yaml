@@ -4,7 +4,7 @@ log:
 
 persistence:
   defaultStore: objstore-default
-  visibilityStore: sqlite-visibility
+  visibilityStore: objstore-default
   numHistoryShards: 1
   datastores:
     objstore-default:
@@ -13,28 +13,6 @@ persistence:
         options:
           backend: sharedmem
           sharedMemName: temporal
-
-    sqlite-visibility:
-      sql:
-        user: ""
-        password: ""
-        pluginName: "sqlite"
-        databaseName: "default"
-        connectAddr: "localhost"
-        connectProtocol: "tcp"
-        connectAttributes:
-          mode: "memory"
-          cache: "private"
-        maxConns: 1
-        maxIdleConns: 1
-        maxConnLifetime: "1h"
-        tls:
-          enabled: false
-          caFile: ""
-          certFile: ""
-          keyFile: ""
-          enableHostVerification: false
-          serverName: ""
 
 global:
   membership:

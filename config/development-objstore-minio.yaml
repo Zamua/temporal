@@ -4,7 +4,7 @@ log:
 
 persistence:
   defaultStore: objstore-minio
-  visibilityStore: sqlite-visibility
+  visibilityStore: objstore-minio
   numHistoryShards: 1
   datastores:
     objstore-minio:
@@ -18,28 +18,6 @@ persistence:
           accessKey: admin
           secret: driftwood-dev
           pathStyle: true
-
-    sqlite-visibility:
-      sql:
-        user: ""
-        password: ""
-        pluginName: "sqlite"
-        databaseName: "default"
-        connectAddr: "localhost"
-        connectProtocol: "tcp"
-        connectAttributes:
-          mode: "memory"
-          cache: "private"
-        maxConns: 1
-        maxIdleConns: 1
-        maxConnLifetime: "1h"
-        tls:
-          enabled: false
-          caFile: ""
-          certFile: ""
-          keyFile: ""
-          enableHostVerification: false
-          serverName: ""
 
 global:
   membership:

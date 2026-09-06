@@ -3,14 +3,19 @@ package objstore
 import (
 	"context"
 
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 // AbstractFactory is the objstore implementation of
@@ -69,3 +74,33 @@ func (a *AbstractFactory) NewFactory(
 // Verify at compile-time that AbstractFactory satisfies the
 // extension-point interface.
 var _ client.AbstractDataStoreFactory = (*AbstractFactory)(nil)
+var _ visibility.VisibilityStoreFactory = (*AbstractFactory)(nil)
+
+// NewVisibilityStore implements visibility.VisibilityStoreFactory.
+// Visibility is configured independently from the default persistence
+// store, even when both point at the same customDatastore block.
+func (a *AbstractFactory) NewVisibilityStore(
+	cfg config.CustomDatastoreConfig,
+	saProvider searchattribute.Provider,
+	saMapperProvider searchattribute.MapperProvider,
+	_ namespace.Registry,
+	chasmRegistry *chasm.Registry,
+	_ resolver.ServiceResolver,
+	logger log.Logger,
+	_ metrics.Handler,
+) (store.VisibilityStore, error) {
+	opts, err := parseOptions(cfg.Options)
+	if err != nil {
+		logger.Fatal("objstore visibility: invalid customDatastore.options", tag.Error(err))
+	}
+	blobStore, err := newBlobStore(context.Background(), opts)
+	if err != nil {
+		logger.Fatal("objstore visibility: failed to construct blob.Store",
+			tag.NewStringTag("backend", opts.Backend),
+			tag.Error(err))
+	}
+	logger.Info("objstore: visibility store initialized",
+		tag.NewStringTag("backend", opts.Backend),
+		tag.NewStringTag("bucket", opts.Bucket))
+	return newVisibilityStore(blobStore, saProvider, saMapperProvider, chasmRegistry), nil
+}

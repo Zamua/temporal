@@ -237,6 +237,7 @@ func buildCLI() *cli.App {
 					// it in the YAML, so registering it unconditionally is
 					// backward compatible with all existing configs.
 					temporal.WithCustomDataStoreFactory(objstore.NewAbstractFactory()),
+					temporal.WithCustomVisibilityStoreFactory(objstore.NewAbstractFactory()),
 				)
 				if err != nil {
 					return cli.Exit(fmt.Sprintf("Unable to create server. Error: %v.", err), 1)
